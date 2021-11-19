@@ -1,0 +1,64 @@
+{
+	"name": "com.fabioiotti.mirror",
+	"version": "53.6.0",
+	"displayName": "Mirror",
+	"description": "#1 Open Source Unity Networking Library",
+	"unity": "2019.3",
+	"samples": [
+		{
+			"displayName": "Script Templates",
+			"description": "We've added Script Templates to make it easier to create derived class scripts that inherit from our base classes. The Mirror section will appear under the Assets > Create menu, as well as the context menu that comes up when you right-click on any folder in your project. You'll be prompted for the file name like any other asset creation.",
+			"path": "Samples~/ScriptTemplates"
+		},
+		{
+			"displayName": "Basic",
+			"description": "Basic is what it sounds like... the most rudimentary baseline of a networked game. Features SyncVars updating random UI data for each player.",
+			"path": "Samples~/Basic"
+		},
+		{
+			"displayName": "Tanks",
+			"description": "This is a simple scene with animated tanks, networked rigidbody projectiles, and NavMesh movement.",
+			"path": "Samples~/Tanks"
+		},
+		{
+			"displayName": "Pong",
+			"description": "A simple example for \"How to build a multiplayer game with Mirror\" is Pong. It illustrates the usage of NetworkManager, NetworkManagerHUD, NetworkBehaviour, NetworkIdentity, NetworkTransform, NetworkStartPosition and various Attributes.",
+			"path": "Samples~/Pong"
+		},
+		{
+			"displayName": "Additive Scenes",
+			"description": "The Additive Scenes example demonstrates a server additively loading a sub-scene into a main scene at startup, and having a server-only trigger that generates a message to any client whose player enters the trigger zone to also load the sub-scene, and subsequently unload it when they leave the trigger zone. Only players inside the trigger zone can see the objects in the sub-scene. Network Proximity Checker components are key to making this scenario work.",
+			"path": "Samples~/AdditiveScenes"
+		},
+		{
+			"displayName": "Multiple AdditiveScenes",
+			"description": "The Multiple Concurrent Additive Scenes example demonstrates a server additively loading multiple instances of a sub-scene into a main scene at startup, with physics separation, and assigning players to the instances to play matches independently.",
+			"path": "Samples~/MultipleAdditiveScenes"
+		},
+		{
+			"displayName": "Room System",
+			"description": "The Room System example demonstrates how to set up a \"staging\" scene where players assemble before starting a match. When all players are ready, the server sends them all a message to change scenes (along with the server itself) to the actual game play scene so they all come in at once. Includes fully playable game with a character controller where players collect server-spawned prizes for score.",
+			"path": "Samples~/Room"
+		},
+		{
+			"displayName": "Benchmark",
+			"path": "Samples~/Benchmark"
+		},
+		{
+			"displayName": "Chat",
+			"path": "Samples~/Chat"
+		},
+		{
+			"displayName": "Discovery",
+			"path": "Samples~/Discovery"
+		},
+		{
+			"displayName": "Multiple Matches",
+			"path": "Samples~/MultipleMatches"
+		},
+		{
+			"displayName": "Rigidbody Physics",
+			"path": "Samples~/RigidbodyPhysics"
+		}
+	]
+}
