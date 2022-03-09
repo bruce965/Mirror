@@ -3,7 +3,7 @@
 [![Download](https://img.shields.io/badge/asset_store-brightgreen.svg)](https://assetstore.unity.com/packages/tools/network/mirror-129321)
 [![Documentation](https://img.shields.io/badge/docs-brightgreen.svg)](https://mirror-networking.gitbook.io/)
 [![Showcase](https://img.shields.io/badge/showcase-brightgreen.svg)](https://mirror-networking.com/showcase/)
-[![Video Tutorial](https://img.shields.io/badge/video_tutorial-brightgreen.svg)](https://www.youtube.com/playlist?list=PLkx8oFug638oBYF5EOwsSS-gOVBXj1dkP)
+[![Video Tutorials](https://img.shields.io/badge/video_tutorial-brightgreen.svg)](https://mirror-networking.gitbook.io/docs/community-guides/video-tutorials)
 [![Forum](https://img.shields.io/badge/forum-brightgreen.svg)](https://forum.unity.com/threads/mirror-networking-for-unity-aka-hlapi-community-edition.425437/)
 [![Build](https://img.shields.io/appveyor/ci/vis2k73562/hlapi-community-edition/Mirror.svg)](https://ci.appveyor.com/project/vis2k73562/hlapi-community-edition/branch/mirror)
 [![Discord](https://img.shields.io/discord/343440455738064897.svg)](https://discordapp.com/invite/N9QVxbM)
@@ -93,13 +93,13 @@ If you are migrating from UNET, then please check out our [Migration Guide](http
   <tr>
     <th><a href="https://inferna.net">Inferna</a></th>
     <th><a href="https://nightz.io">NightZ</a></th>
-    <th><a href=""></a></th>
+    <th><a href="https://store.steampowered.com/app/1547790/Roze_Blud">Roze Blud</a></th>
     <th><a href=""></a></th>
   </tr>
   <tr>
     <td><img src="https://user-images.githubusercontent.com/16416509/119760092-f3109e80-bedb-11eb-96cd-8e7f52e483fc.png" height="100"/></td>
     <td><img src="https://user-images.githubusercontent.com/16416509/130729336-9c4e95d9-69bc-4410-b894-b2677159a472.jpg" height="100"/></td>
-    <td></td>
+    <td><img src="https://user-images.githubusercontent.com/16416509/152281763-87ae700e-9648-4335-9b20-3247e09334b5.png" height="100"/></td>
     <td></td>
   </tr>
 </table>
@@ -138,11 +138,8 @@ All sponsors are invited to the [Mirror V46 LTS Repository](https://github.com/M
 ## Development & Contributing
 Mirror is used **in production** by everything from small indie projects to million dollar funded games that will run for a decade or more.
 
-Therefore it is of utmost importance for us to follow the [KISS principle](https://en.wikipedia.org/wiki/KISS_principle) in order for our games to survive, so that we can still fix networking bugs 10 years from now if needed.
+Therefore it is important for us to follow the [KISS principle](https://en.wikipedia.org/wiki/KISS_principle) in order for our games to survive, so that we can still fix networking bugs 10 years from now if needed.
 
-Keeping the next decade in mind, contributing **fixes** / **tests** / **improvements** is highly appreciated while new features have a low probability of being merged.
-
-_At this point, what we don't add to Mirror is more important than what we do add to it!_
 
 # Bug Bounty
 <img src="https://user-images.githubusercontent.com/16416509/110572995-718b5900-8195-11eb-802c-235c82a03bf7.png" height="150">

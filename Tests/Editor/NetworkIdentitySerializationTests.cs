@@ -1,5 +1,4 @@
 // OnDe/SerializeSafely tests.
-using System;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -18,6 +17,15 @@ namespace Mirror.Tests
             base.SetUp();
             ownerWriter = new NetworkWriter();
             observersWriter = new NetworkWriter();
+
+            NetworkServer.Listen(1);
+            ConnectClientBlockingAuthenticatedAndReady(out _);
+        }
+
+        [TearDown]
+        public override void TearDown()
+        {
+            base.TearDown();
         }
 
         // serialize -> deserialize. multiple components to be sure.
@@ -25,46 +33,38 @@ namespace Mirror.Tests
         [Test]
         public void OnSerializeAndDeserializeAllSafely()
         {
-            CreateNetworked(out GameObject _, out NetworkIdentity identity,
-                out SerializeTest1NetworkBehaviour comp1,
-                out SerializeTest2NetworkBehaviour comp2);
+            // need two of both versions so we can serialize -> deserialize
+            CreateNetworkedAndSpawn(
+                out _, out NetworkIdentity serverIdentity, out SerializeTest1NetworkBehaviour serverComp1, out SerializeTest2NetworkBehaviour serverComp2,
+                out _, out NetworkIdentity clientIdentity, out SerializeTest1NetworkBehaviour clientComp1, out SerializeTest2NetworkBehaviour clientComp2
+            );
 
-            // set some unique values to serialize
-            comp1.value = 12345;
-            comp1.syncMode = SyncMode.Observers;
-            comp2.value = "67890";
-            comp2.syncMode = SyncMode.Owner;
+            // set sync modes
+            serverComp1.syncMode = clientComp1.syncMode = SyncMode.Observers;
+            serverComp2.syncMode = clientComp2.syncMode = SyncMode.Owner;
 
-            // serialize all
-            identity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
+            // set unique values on server components
+            serverComp1.value = 42;
+            serverComp2.value = "42";
 
-            // owner & observers should have written something
-            Assert.That(ownerWriter.Position, Is.GreaterThan(0));
-            Assert.That(observersWriter.Position, Is.GreaterThan(0));
-            Debug.Log($"ownerWriter: {BitConverter.ToString(ownerWriter.ToArray())}");
-            Debug.Log($"observersWriter: {BitConverter.ToString(observersWriter.ToArray())}");
+            // serialize server object
+            serverIdentity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
 
-            // reset component values
-            comp1.value = 0;
-            comp2.value = null;
-
-            // deserialize all for owner
+            // deserialize client object with OWNER payload
             NetworkReader reader = new NetworkReader(ownerWriter.ToArray());
-            identity.OnDeserializeAllSafely(reader, true);
-            Assert.That(comp1.value, Is.EqualTo(12345));
-            Assert.That(comp2.value, Is.EqualTo("67890"));
+            clientIdentity.OnDeserializeAllSafely(reader, true);
+            Assert.That(clientComp1.value, Is.EqualTo(42));
+            Assert.That(clientComp2.value, Is.EqualTo("42"));
 
             // reset component values
-            comp1.value = 0;
-            comp2.value = null;
+            clientComp1.value = 0;
+            clientComp2.value = null;
 
-            // deserialize all for observers
+            // deserialize client object with OBSERVERS payload
             reader = new NetworkReader(observersWriter.ToArray());
-            identity.OnDeserializeAllSafely(reader, true);
-            // observers mode, should be in data
-            Assert.That(comp1.value, Is.EqualTo(12345));
-            // owner mode, should not be in data
-            Assert.That(comp2.value, Is.EqualTo(null));
+            clientIdentity.OnDeserializeAllSafely(reader, true);
+            Assert.That(clientComp1.value, Is.EqualTo(42)); // observers mode should be in data
+            Assert.That(clientComp2.value, Is.EqualTo(null)); // owner mode shouldn't be in data
         }
 
         // serialization should work even if a component throws an exception.
@@ -72,47 +72,49 @@ namespace Mirror.Tests
         [Test]
         public void SerializationException()
         {
-            CreateNetworked(out GameObject _, out NetworkIdentity identity,
-                out SerializeExceptionNetworkBehaviour compExc,
-                out SerializeTest2NetworkBehaviour comp2);
-
-            // set some unique values to serialize
-            compExc.syncMode = SyncMode.Observers;
-            comp2.value = "67890";
-            comp2.syncMode = SyncMode.Owner;
-
-            // serialize all - should work even if compExc throws an exception
-            // error log because of the exception is expected
+            // the exception component will log exception errors all the way
+            // through this function, starting from spawning where it's
+            // serialized for the first time.
             LogAssert.ignoreFailingMessages = true;
-            identity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
-            LogAssert.ignoreFailingMessages = false;
 
-            // owner & observers should have written something
-            Assert.That(ownerWriter.Position, Is.GreaterThan(0));
-            Assert.That(observersWriter.Position, Is.GreaterThan(0));
+            // need two of both versions so we can serialize -> deserialize
+            // spawning the exception component will already show an exception.
+            // ignore it.
+            CreateNetworkedAndSpawn(
+                out _, out NetworkIdentity serverIdentity, out SerializeExceptionNetworkBehaviour serverCompExc, out SerializeTest2NetworkBehaviour serverComp2,
+                out _, out NetworkIdentity clientIdentity, out SerializeExceptionNetworkBehaviour clientCompExc, out SerializeTest2NetworkBehaviour clientComp2);
 
-            // reset component values
-            comp2.value = null;
+            // set sync modes
+            serverCompExc.syncMode = clientCompExc.syncMode = SyncMode.Observers;
+            serverComp2.syncMode = clientComp2.syncMode = SyncMode.Owner;
 
-            // deserialize all for owner - should work even if compExc throws an exception
+            // set unique values on server components
+            serverComp2.value = "42";
+
+            // serialize server object
+            // should work even if compExc throws an exception.
+            // error log because of the exception is expected.
+            serverIdentity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
+
+            // deserialize client object with OWNER payload
+            // should work even if compExc throws an exception
+            // error log because of the exception is expected
             NetworkReader reader = new NetworkReader(ownerWriter.ToArray());
-            // error log because of the exception is expected
-            LogAssert.ignoreFailingMessages = true;
-            identity.OnDeserializeAllSafely(reader, true);
-            LogAssert.ignoreFailingMessages = false;
-            Assert.That(comp2.value, Is.EqualTo("67890"));
+            clientIdentity.OnDeserializeAllSafely(reader, true);
+            Assert.That(clientComp2.value, Is.EqualTo("42"));
 
             // reset component values
-            comp2.value = null;
+            clientComp2.value = null;
 
-            // deserialize all for observers - should work even if compExc throws an exception
-            reader = new NetworkReader(observersWriter.ToArray());
+            // deserialize client object with OBSERVER payload
+            // should work even if compExc throws an exception
             // error log because of the exception is expected
-            LogAssert.ignoreFailingMessages = true;
-            identity.OnDeserializeAllSafely(reader, true);
+            reader = new NetworkReader(observersWriter.ToArray());
+            clientIdentity.OnDeserializeAllSafely(reader, true);
+            Assert.That(clientComp2.value, Is.EqualTo(null)); // owner mode should be in data
+
+            // restore error checks
             LogAssert.ignoreFailingMessages = false;
-            // owner mode, should not be in data
-            Assert.That(comp2.value, Is.EqualTo(null));
         }
 
         // OnSerializeAllSafely supports at max 64 components, because our
@@ -120,24 +122,33 @@ namespace Mirror.Tests
         [Test]
         public void TooManyComponents()
         {
-            CreateNetworked(out GameObject gameObject, out NetworkIdentity identity);
+            // create spawned so that isServer/isClient is set properly
+            CreateNetworkedAndSpawn(
+                out GameObject serverGO, out NetworkIdentity serverIdentity,
+                out GameObject clientGO, out NetworkIdentity clientIdentity);
 
             // add 65 components
             for (int i = 0; i < 65; ++i)
-                gameObject.AddComponent<SerializeTest1NetworkBehaviour>();
+            {
+                serverGO.AddComponent<SerializeTest1NetworkBehaviour>();
+                clientGO.AddComponent<SerializeTest1NetworkBehaviour>();
+            }
 
             // CreateNetworked already initializes the components.
             // let's reset and initialize again with the added ones.
-            identity.Reset();
-            identity.Awake();
+            serverIdentity.Reset();
+            clientIdentity.Reset();
+            serverIdentity.Awake();
+            clientIdentity.Awake();
 
             // ignore error from creating cache (has its own test)
             LogAssert.ignoreFailingMessages = true;
-            _ = identity.NetworkBehaviours;
+            _ = serverIdentity.NetworkBehaviours;
+            _ = clientIdentity.NetworkBehaviours;
             LogAssert.ignoreFailingMessages = false;
 
             // try to serialize
-            identity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
+            serverIdentity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
 
             // Should still write with too many Components because NetworkBehavioursCache should handle the error
             Assert.That(ownerWriter.Position, Is.GreaterThan(0));
@@ -152,29 +163,27 @@ namespace Mirror.Tests
         [Test]
         public void SerializationMismatch()
         {
-            CreateNetworked(out GameObject _, out NetworkIdentity identity,
-                out SerializeMismatchNetworkBehaviour compMiss,
-                out SerializeTest2NetworkBehaviour comp);
+            // create spawned so that isServer/isClient is set properly
+            CreateNetworkedAndSpawn(
+                out _, out NetworkIdentity serverIdentity, out SerializeMismatchNetworkBehaviour serverCompMiss, out SerializeTest2NetworkBehaviour serverComp,
+                out _, out NetworkIdentity clientIdentity, out SerializeMismatchNetworkBehaviour clientCompMiss, out SerializeTest2NetworkBehaviour clientComp);
 
-            // set some unique values to serialize
-            comp.value = "67890";
+            // set some unique values on server component to serialize
+            serverComp.value = "42";
 
-            // serialize
-            identity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
+            // serialize server object
+            serverIdentity.OnSerializeAllSafely(true, ownerWriter, observersWriter);
 
-            // reset component values
-            comp.value = null;
-
-            // deserialize all
-            NetworkReader reader = new NetworkReader(ownerWriter.ToArray());
-            // warning log because of serialization mismatch
+            // deserialize on client
+            // ignore warning log because of serialization mismatch
             LogAssert.ignoreFailingMessages = true;
-            identity.OnDeserializeAllSafely(reader, true);
+            NetworkReader reader = new NetworkReader(ownerWriter.ToArray());
+            clientIdentity.OnDeserializeAllSafely(reader, true);
             LogAssert.ignoreFailingMessages = false;
 
             // the mismatch component will fail, but the one before and after
             // should still work fine. that's the whole point.
-            Assert.That(comp.value, Is.EqualTo("67890"));
+            Assert.That(clientComp.value, Is.EqualTo("42"));
         }
     }
 }

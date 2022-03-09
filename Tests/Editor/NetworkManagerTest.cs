@@ -7,14 +7,13 @@ namespace Mirror.Tests
     [TestFixture]
     public class NetworkManagerTest : MirrorEditModeTest
     {
-        GameObject gameObject;
+        GameObject gameObject => holder;
         NetworkManager manager;
 
         [SetUp]
         public override void SetUp()
         {
             base.SetUp();
-            gameObject = transport.gameObject;
             manager = gameObject.AddComponent<NetworkManager>();
         }
 
@@ -82,12 +81,14 @@ namespace Mirror.Tests
         public void ShutdownTest()
         {
             manager.StartClient();
-            NetworkManager.Shutdown();
+            NetworkManager.ResetStatics();
 
             Assert.That(NetworkManager.startPositions.Count, Is.Zero);
             Assert.That(NetworkManager.startPositionIndex, Is.Zero);
-            Assert.That(NetworkManager.startPositionIndex, Is.Zero);
+            Assert.That(NetworkManager.clientReadyConnection, Is.Null);
+            Assert.That(NetworkManager.loadingSceneAsync, Is.Null);
             Assert.That(NetworkManager.singleton, Is.Null);
+            Assert.That(NetworkManager.networkSceneName, Is.Empty);
         }
 
         [Test]

@@ -5,22 +5,17 @@ namespace Mirror.Weaver.Tests
     public class WeaverNetworkBehaviourTests : WeaverTestsBuildFromTestName
     {
         [Test]
-        public void NetworkBehaviourValid()
+        public void NetworkBehaviourGenericSyncVar()
         {
-            IsSuccess();
+            HasError("genericSyncVarNotAllowed has generic type. Generic SyncVars are not supported",
+                "T WeaverNetworkBehaviourTests.NetworkBehaviourGeneric.NetworkBehaviourGeneric`1::genericSyncVarNotAllowed");
         }
 
         [Test]
-        public void NetworkBehaviourAbstractBaseValid()
+        public void NetworkBehaviourGenericRpc()
         {
-            IsSuccess();
-        }
-
-        [Test]
-        public void NetworkBehaviourGeneric()
-        {
-            HasError("NetworkBehaviourGeneric`1 cannot have generic parameters",
-                "WeaverNetworkBehaviourTests.NetworkBehaviourGeneric.NetworkBehaviourGeneric`1");
+            HasError("RpcGeneric cannot have generic parameters",
+                "System.Void WeaverNetworkBehaviourTests.NetworkBehaviourGeneric.NetworkBehaviourGeneric`1::RpcGeneric(T)");
         }
 
         [Test]
@@ -116,19 +111,6 @@ namespace Mirror.Weaver.Tests
         }
 
         [Test]
-        public void NetworkBehaviourTargetRpcParamNetworkConnection()
-        {
-            IsSuccess();
-        }
-
-        [Test]
-        public void NetworkBehaviourTargetRpcDuplicateName()
-        {
-            HasError("Duplicate Target Rpc name TargetRpcCantHaveSameName",
-                "System.Void WeaverNetworkBehaviourTests.NetworkBehaviourTargetRpcDuplicateName.NetworkBehaviourTargetRpcDuplicateName::TargetRpcCantHaveSameName(Mirror.NetworkConnection,System.Int32,System.Int32)");
-        }
-
-        [Test]
         public void NetworkBehaviourClientRpcGenericParam()
         {
             HasError("RpcCantHaveGeneric cannot have generic parameters",
@@ -209,13 +191,6 @@ namespace Mirror.Weaver.Tests
         }
 
         [Test]
-        public void NetworkBehaviourClientRpcDuplicateName()
-        {
-            HasError("Duplicate ClientRpc name RpcCantHaveSameName",
-                "System.Void WeaverNetworkBehaviourTests.NetworkBehaviourClientRpcDuplicateName.NetworkBehaviourClientRpcDuplicateName::RpcCantHaveSameName(System.Int32,System.Int32)");
-        }
-
-        [Test]
         public void NetworkBehaviourCmdParamOut()
         {
             HasError("CmdCantHaveParamOut cannot have out parameters",
@@ -270,13 +245,6 @@ namespace Mirror.Weaver.Tests
         {
             HasError("CmdCantHaveParamOptional has invalid parameter monkeyCon, Cannot pass NetworkConnections. Instead use 'NetworkConnectionToClient conn = null' to get the sender's connection on the server",
                 "System.Void WeaverNetworkBehaviourTests.NetworkBehaviourCmdParamNetworkConnection.NetworkBehaviourCmdParamNetworkConnection::CmdCantHaveParamOptional(Mirror.NetworkConnection)");
-        }
-
-        [Test]
-        public void NetworkBehaviourCmdDuplicateName()
-        {
-            HasError("Duplicate Command name CmdCantHaveSameName",
-                "System.Void WeaverNetworkBehaviourTests.NetworkBehaviourCmdDuplicateName.NetworkBehaviourCmdDuplicateName::CmdCantHaveSameName(System.Int32,System.Int32)");
         }
     }
 }

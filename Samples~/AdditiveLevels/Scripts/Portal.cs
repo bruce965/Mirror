@@ -1,4 +1,6 @@
 ﻿using System.Collections;
+using System.IO;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -15,33 +17,35 @@ namespace Mirror.Examples.AdditiveLevels
         [Tooltip("Reference to child TMP label")]
         public TMPro.TextMeshPro label;
 
-        WaitForSeconds waitForSeconds;
+        [SyncVar(hook = nameof(OnLabelTextChanged))]
+        public string labelText;
+
+        public void OnLabelTextChanged(string _, string newValue)
+        {
+            label.text = labelText;
+        }
+
+        // This is approximately the fade time
+        WaitForSeconds waitForFade = new WaitForSeconds(2f);
 
         public override void OnStartServer()
         {
-            // This is aproximately the fade time
-            waitForSeconds = new WaitForSeconds(((AdditiveLevelsNetworkManager)NetworkManager.singleton).fadeInOut.speed + 0.3f);
-        }
+            labelText = Path.GetFileNameWithoutExtension(destinationScene);
 
-        /// <summary>
-        /// Called on every NetworkBehaviour when it is activated on a client.
-        /// <para>Objects on the host have this function called, as there is a local client on the host. The values of SyncVars on object are guaranteed to be initialized correctly with the latest state from the server when this function is called on the client.</para>
-        /// </summary>
-        public override void OnStartClient()
-        {
-            label.text = SceneManager.GetSceneByPath(destinationScene).name;
+            // Simple Regex to insert spaces before capitals, numbers
+            labelText = Regex.Replace(labelText, @"\B[A-Z0-9]+", " $0");
         }
 
         // Note that I have created layers called Player(8) and Portal(9) and set them
         // up in the Physics collision matrix so only Player collides with Portal.
         void OnTriggerEnter(Collider other)
         {
-            //Debug.Log($"Portal::OnTriggerEnter {gameObject.name} in {gameObject.scene.name}");
-
             // tag check in case you didn't set up the layers and matrix as noted above
             if (!other.CompareTag("Player")) return;
 
-            // applies to host client on server or remote client
+            //Debug.Log($"{System.DateTime.Now:HH:mm:ss:fff} Portal::OnTriggerEnter {gameObject.name} in {gameObject.scene.name}");
+
+            // applies to host client on server and remote clients
             if (other.TryGetComponent<PlayerController>(out PlayerController playerController))
                 playerController.enabled = false;
 
@@ -60,10 +64,14 @@ namespace Mirror.Examples.AdditiveLevels
                 // Tell client to unload previous subscene. No custom handling for this.
                 conn.Send(new SceneMessage { sceneName = gameObject.scene.path, sceneOperation = SceneOperation.UnloadAdditive, customHandling = true });
 
-                yield return waitForSeconds;
+                yield return waitForFade;
 
+                //Debug.Log($"SendPlayerToNewScene RemovePlayerForConnection {conn} netId:{conn.identity.netId}");
                 NetworkServer.RemovePlayerForConnection(conn, false);
-                yield return null;
+
+                // reposition player on server and client
+                player.transform.position = startPosition;
+                player.transform.LookAt(Vector3.up);
 
                 // Move player to new subscene.
                 SceneManager.MoveGameObjectToScene(player, SceneManager.GetSceneByPath(destinationScene));
@@ -71,15 +79,11 @@ namespace Mirror.Examples.AdditiveLevels
                 // Tell client to load the new subscene with custom handling (see NetworkManager::OnClientChangeScene).
                 conn.Send(new SceneMessage { sceneName = destinationScene, sceneOperation = SceneOperation.LoadAdditive, customHandling = true });
 
-                // reposition player on server and client
-                player.transform.position = startPosition;
-                player.transform.LookAt(Vector3.up);
-
+                //Debug.Log($"SendPlayerToNewScene AddPlayerForConnection {conn} netId:{conn.identity.netId}");
                 NetworkServer.AddPlayerForConnection(conn, player);
 
                 // host client would have been disabled by OnTriggerEnter above
-                PlayerController playerController = null;
-                if (NetworkClient.localPlayer != null && NetworkClient.localPlayer.TryGetComponent<PlayerController>(out playerController))
+                if (NetworkClient.localPlayer != null && NetworkClient.localPlayer.TryGetComponent<PlayerController>(out PlayerController playerController))
                     playerController.enabled = true;
             }
         }

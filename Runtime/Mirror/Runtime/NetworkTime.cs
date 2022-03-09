@@ -1,5 +1,8 @@
 using System;
+using UnityEngine;
+#if !UNITY_2020_3_OR_NEWER
 using Stopwatch = System.Diagnostics.Stopwatch;
+#endif
 
 namespace Mirror
 {
@@ -14,15 +17,6 @@ namespace Mirror
 
         static double lastPingTime;
 
-        // Date and time when the application started
-        // TODO Unity 2020 / 2021 supposedly has double Time.time now?
-        static readonly Stopwatch stopwatch = new Stopwatch();
-
-        static NetworkTime()
-        {
-            stopwatch.Start();
-        }
-
         static ExponentialMovingAverage _rtt = new ExponentialMovingAverage(10);
         static ExponentialMovingAverage _offset = new ExponentialMovingAverage(10);
 
@@ -31,11 +25,16 @@ namespace Mirror
         static double offsetMax = double.MaxValue;
 
         /// <summary>Returns double precision clock time _in this system_, unaffected by the network.</summary>
-        // useful until we have Unity's 'double' Time.time
-        //
+#if UNITY_2020_3_OR_NEWER
+        public static double localTime => Time.timeAsDouble;
+#else
+        // need stopwatch for older Unity versions, but it's quite slow.
         // CAREFUL: unlike Time.time, this is not a FRAME time.
         //          it changes during the frame too.
+        static readonly Stopwatch stopwatch = new Stopwatch();
+        static NetworkTime() => stopwatch.Start();
         public static double localTime => stopwatch.Elapsed.TotalSeconds;
+#endif
 
         /// <summary>The time in seconds since the server started.</summary>
         //
@@ -73,14 +72,20 @@ namespace Mirror
         // TODO does this need to be public? user should only need NetworkTime.time
         public static double rttStandardDeviation => Math.Sqrt(rttVariance);
 
-        public static void Reset()
+        // RuntimeInitializeOnLoadMethod -> fast playmode without domain reload
+        [UnityEngine.RuntimeInitializeOnLoadMethod]
+        public static void ResetStatics()
         {
-            stopwatch.Restart();
+            PingFrequency = 2.0f;
+            PingWindowSize = 10;
+            lastPingTime = 0;
             _rtt = new ExponentialMovingAverage(PingWindowSize);
             _offset = new ExponentialMovingAverage(PingWindowSize);
             offsetMin = double.MinValue;
             offsetMax = double.MaxValue;
-            lastPingTime = 0;
+#if !UNITY_2020_3_OR_NEWER
+            stopwatch.Restart();
+#endif
         }
 
         internal static void UpdateClient()
@@ -97,7 +102,7 @@ namespace Mirror
         // executed at the server when we receive a ping message
         // reply with a pong containing the time from the client
         // and time from the server
-        internal static void OnServerPing(NetworkConnection conn, NetworkPingMessage message)
+        internal static void OnServerPing(NetworkConnectionToClient conn, NetworkPingMessage message)
         {
             // Debug.Log($"OnPingServerMessage conn:{conn}");
             NetworkPongMessage pongMessage = new NetworkPongMessage

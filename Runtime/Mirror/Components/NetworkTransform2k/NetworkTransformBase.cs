@@ -17,6 +17,8 @@
 //      -> client gets Cmd() and X at the same time, but buffers X for bufferTime
 //      -> for unreliable, it would get X before the reliable Cmd(), still
 //         buffer for bufferTime but end up closer to the original time
+// comment out the below line to quickly revert the onlySyncOnChange feature
+#define onlySyncOnChange_BANDWIDTH_SAVING
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -74,6 +76,30 @@ namespace Mirror
 
         [Tooltip("Once buffer is larger catchupThreshold, accelerate by multiplier % per excess entry.")]
         [Range(0, 1)] public float catchupMultiplier = 0.10f;
+
+#if onlySyncOnChange_BANDWIDTH_SAVING
+        [Header("Sync Only If Changed")]
+        [Tooltip("When true, changes are not sent unless greater than sensitivity values below.")]
+        public bool onlySyncOnChange = true;
+
+        // 3 was original, but testing under really bad network conditions, 2%-5% packet loss and 250-1200ms ping, 5 proved to eliminate any twitching.
+        [Tooltip("How much time, as a multiple of send interval, has passed before clearing buffers.")]
+        public float bufferResetMultiplier = 5;
+
+        [Header("Sensitivity"), Tooltip("Sensitivity of changes needed before an updated state is sent over the network")]
+        public float positionSensitivity = 0.01f;
+        public float rotationSensitivity = 0.01f;
+        public float scaleSensitivity = 0.01f;
+
+        protected bool positionChanged;
+        protected bool rotationChanged;
+        protected bool scaleChanged;
+
+        // Used to store last sent snapshots
+        protected NTSnapshot lastSnapshot;
+        protected bool cachedSnapshotComparison;
+        protected bool hasSentUnchangedPosition;
+#endif
 
         // snapshots sorted by timestamp
         // in the original article, glenn fiedler drops any snapshots older than
@@ -148,7 +174,17 @@ namespace Mirror
             if (syncScale)
                 targetComponent.localScale = interpolateScale ? interpolated.scale : goal.scale;
         }
+#if onlySyncOnChange_BANDWIDTH_SAVING
+        // Returns true if position, rotation AND scale are unchanged, within given sensitivity range.
+        protected virtual bool CompareSnapshots(NTSnapshot currentSnapshot)
+        {
+            positionChanged = Vector3.SqrMagnitude(lastSnapshot.position - currentSnapshot.position) > positionSensitivity * positionSensitivity;
+            rotationChanged = Quaternion.Angle(lastSnapshot.rotation, currentSnapshot.rotation) > rotationSensitivity;
+            scaleChanged = Vector3.SqrMagnitude(lastSnapshot.scale - currentSnapshot.scale) > scaleSensitivity * scaleSensitivity;
 
+            return (!positionChanged && !rotationChanged && !scaleChanged);
+        }
+#endif
         // cmd /////////////////////////////////////////////////////////////////
         // only unreliable. see comment above of this file.
         [Command(channel = Channels.Unreliable)]
@@ -175,7 +211,17 @@ namespace Mirror
             // only player owned objects (with a connection) can send to
             // server. we can get the timestamp from the connection.
             double timestamp = connectionToClient.remoteTimeStamp;
+#if onlySyncOnChange_BANDWIDTH_SAVING
+            if (onlySyncOnChange)
+            {
+                double timeIntervalCheck = bufferResetMultiplier * sendInterval;
 
+                if (serverBuffer.Count > 0 && serverBuffer.Values[serverBuffer.Count - 1].remoteTimestamp + timeIntervalCheck < timestamp)
+                {
+                    Reset();
+                }
+            }
+#endif
             // position, rotation, scale can have no value if same as last time.
             // saves bandwidth.
             // but we still need to feed it to snapshot interpolation. we can't
@@ -185,9 +231,9 @@ namespace Mirror
             //   client sends snapshot at t=10
             // then the server would assume that it's one super slow move and
             // replay it for 10 seconds.
-            if (!position.HasValue) position = targetComponent.localPosition;
-            if (!rotation.HasValue) rotation = targetComponent.localRotation;
-            if (!scale.HasValue) scale = targetComponent.localScale;
+            if (!position.HasValue) position = serverBuffer.Count > 0 ? serverBuffer.Values[serverBuffer.Count - 1].position : targetComponent.localPosition;
+            if (!rotation.HasValue) rotation = serverBuffer.Count > 0 ? serverBuffer.Values[serverBuffer.Count - 1].rotation : targetComponent.localRotation;
+            if (!scale.HasValue) scale = serverBuffer.Count > 0 ? serverBuffer.Values[serverBuffer.Count - 1].scale : targetComponent.localScale;
 
             // construct snapshot with batch timestamp to save bandwidth
             NTSnapshot snapshot = new NTSnapshot(
@@ -228,7 +274,17 @@ namespace Mirror
             // but all of them go through NetworkClient.connection.
             // we can get the timestamp from there.
             double timestamp = NetworkClient.connection.remoteTimeStamp;
+#if onlySyncOnChange_BANDWIDTH_SAVING
+            if (onlySyncOnChange)
+            {
+                double timeIntervalCheck = bufferResetMultiplier * sendInterval;
 
+                if (clientBuffer.Count > 0 && clientBuffer.Values[clientBuffer.Count - 1].remoteTimestamp + timeIntervalCheck < timestamp)
+                {
+                    Reset();
+                }
+            }
+#endif
             // position, rotation, scale can have no value if same as last time.
             // saves bandwidth.
             // but we still need to feed it to snapshot interpolation. we can't
@@ -238,9 +294,9 @@ namespace Mirror
             //   client sends snapshot at t=10
             // then the server would assume that it's one super slow move and
             // replay it for 10 seconds.
-            if (!position.HasValue) position = targetComponent.localPosition;
-            if (!rotation.HasValue) rotation = targetComponent.localRotation;
-            if (!scale.HasValue) scale = targetComponent.localScale;
+            if (!position.HasValue) position = clientBuffer.Count > 0 ? clientBuffer.Values[clientBuffer.Count - 1].position : targetComponent.localPosition;
+            if (!rotation.HasValue) rotation = clientBuffer.Count > 0 ? clientBuffer.Values[clientBuffer.Count - 1].rotation : targetComponent.localRotation;
+            if (!scale.HasValue) scale = clientBuffer.Count > 0 ? clientBuffer.Values[clientBuffer.Count - 1].scale : targetComponent.localScale;
 
             // construct snapshot with batch timestamp to save bandwidth
             NTSnapshot snapshot = new NTSnapshot(
@@ -291,14 +347,39 @@ namespace Mirror
                 // send snapshot without timestamp.
                 // receiver gets it from batch timestamp to save bandwidth.
                 NTSnapshot snapshot = ConstructSnapshot();
+#if onlySyncOnChange_BANDWIDTH_SAVING
+                cachedSnapshotComparison = CompareSnapshots(snapshot);
+                if (cachedSnapshotComparison && hasSentUnchangedPosition && onlySyncOnChange) { return; }
+#endif
+
+#if onlySyncOnChange_BANDWIDTH_SAVING
                 RpcServerToClientSync(
                     // only sync what the user wants to sync
-                    syncPosition ? snapshot.position : new Vector3?(),
-                    syncRotation? snapshot.rotation : new Quaternion?(),
-                    syncScale ? snapshot.scale : new Vector3?()
+                    syncPosition && positionChanged ? snapshot.position : default(Vector3?),
+                    syncRotation && rotationChanged ? snapshot.rotation : default(Quaternion?),
+                    syncScale && scaleChanged ? snapshot.scale : default(Vector3?)
                 );
+#else
+                RpcServerToClientSync(
+                    // only sync what the user wants to sync
+                    syncPosition ? snapshot.position : default(Vector3?),
+                    syncRotation ? snapshot.rotation : default(Quaternion?),
+                    syncScale ? snapshot.scale : default(Vector3?)
+                );
+#endif
 
                 lastServerSendTime = NetworkTime.localTime;
+#if onlySyncOnChange_BANDWIDTH_SAVING
+                if (cachedSnapshotComparison)
+                {
+                    hasSentUnchangedPosition = true;
+                }
+                else
+                {
+                    hasSentUnchangedPosition = false;
+                    lastSnapshot = snapshot;
+                }
+#endif
             }
 
             // apply buffered snapshots IF client authority
@@ -359,14 +440,39 @@ namespace Mirror
                     // send snapshot without timestamp.
                     // receiver gets it from batch timestamp to save bandwidth.
                     NTSnapshot snapshot = ConstructSnapshot();
+#if onlySyncOnChange_BANDWIDTH_SAVING
+                    cachedSnapshotComparison = CompareSnapshots(snapshot);
+                    if (cachedSnapshotComparison && hasSentUnchangedPosition && onlySyncOnChange) { return; }
+#endif
+
+#if onlySyncOnChange_BANDWIDTH_SAVING
                     CmdClientToServerSync(
                         // only sync what the user wants to sync
-                        syncPosition ? snapshot.position : new Vector3?(),
-                        syncRotation? snapshot.rotation : new Quaternion?(),
-                        syncScale ? snapshot.scale : new Vector3?()
+                        syncPosition && positionChanged ? snapshot.position : default(Vector3?),
+                        syncRotation && rotationChanged ? snapshot.rotation : default(Quaternion?),
+                        syncScale && scaleChanged ? snapshot.scale : default(Vector3?)
                     );
+#else
+                    CmdClientToServerSync(
+                        // only sync what the user wants to sync
+                        syncPosition ? snapshot.position : default(Vector3?),
+                        syncRotation ? snapshot.rotation : default(Quaternion?),
+                        syncScale ? snapshot.scale : default(Vector3?)
+                    );
+#endif
 
                     lastClientSendTime = NetworkTime.localTime;
+#if onlySyncOnChange_BANDWIDTH_SAVING
+                    if (cachedSnapshotComparison)
+                    {
+                        hasSentUnchangedPosition = true;
+                    }
+                    else
+                    {
+                        hasSentUnchangedPosition = false;
+                        lastSnapshot = snapshot;
+                    }
+#endif
                 }
             }
             // for all other clients (and for local player if !authority),
@@ -452,7 +558,7 @@ namespace Mirror
         // otherwise it would interpolate to a (far away) new position.
         // => manually calling Teleport is the only 100% reliable solution.
         [ClientRpc]
-        public void RpcTeleportAndRotate(Vector3 destination, Quaternion rotation)
+        public void RpcTeleport(Vector3 destination, Quaternion rotation)
         {
             // NOTE: even in client authority mode, the server is always allowed
             //       to teleport the player. for example:
@@ -461,6 +567,14 @@ namespace Mirror
             //         so the server should be able to reset position if needed.
 
             // TODO what about host mode?
+            OnTeleport(destination, rotation);
+        }
+
+        // Deprecated 2022-01-19
+        [Obsolete("Use RpcTeleport(Vector3, Quaternion) instead.")]
+        [ClientRpc]
+        public void RpcTeleportAndRotate(Vector3 destination, Quaternion rotation)
+        {
             OnTeleport(destination, rotation);
         }
 
@@ -490,7 +604,7 @@ namespace Mirror
         // otherwise it would interpolate to a (far away) new position.
         // => manually calling Teleport is the only 100% reliable solution.
         [Command]
-        public void CmdTeleportAndRotate(Vector3 destination, Quaternion rotation)
+        public void CmdTeleport(Vector3 destination, Quaternion rotation)
         {
             // client can only teleport objects that it has authority over.
             if (!clientAuthority) return;
@@ -505,10 +619,20 @@ namespace Mirror
             // TODO or not? if client ONLY calls Teleport(pos), the position
             //      would only be set after the rpc. unless the client calls
             //      BOTH Teleport(pos) and targetComponent.position=pos
-            RpcTeleportAndRotate(destination, rotation);
+            RpcTeleport(destination, rotation);
         }
 
-        protected virtual void Reset()
+        // Deprecated 2022-01-19
+        [Obsolete("Use CmdTeleport(Vector3, Quaternion) instead.")]
+        [Command]
+        public void CmdTeleportAndRotate(Vector3 destination, Quaternion rotation)
+        {
+            if (!clientAuthority) return;
+            OnTeleport(destination, rotation);
+            RpcTeleport(destination, rotation);
+        }
+
+        public virtual void Reset()
         {
             // disabled objects aren't updated anymore.
             // so let's clear the buffers.
@@ -539,8 +663,36 @@ namespace Mirror
             // buffer limit should be at least multiplier to have enough in there
             bufferSizeLimit = Mathf.Max(bufferTimeMultiplier, bufferSizeLimit);
         }
+        
+        public override bool OnSerialize(NetworkWriter writer, bool initialState)
+        {
+            // sync target component's position on spawn.
+            // fixes https://github.com/vis2k/Mirror/pull/3051/
+            // (Spawn message wouldn't sync NTChild positions either)
+            if (initialState)
+            {
+                if (syncPosition) writer.WriteVector3(targetComponent.localPosition);
+                if (syncRotation) writer.WriteQuaternion(targetComponent.localRotation);
+                if (syncScale)    writer.WriteVector3(targetComponent.localScale);
+                return true;
+            }
+            return false;
+        }
 
-// OnGUI allocates even if it does nothing. avoid in release.
+        public override void OnDeserialize(NetworkReader reader, bool initialState)
+        {
+            // sync target component's position on spawn.
+            // fixes https://github.com/vis2k/Mirror/pull/3051/
+            // (Spawn message wouldn't sync NTChild positions either)
+            if (initialState)
+            {
+                if (syncPosition) targetComponent.localPosition = reader.ReadVector3();
+                if (syncRotation) targetComponent.localRotation = reader.ReadQuaternion();
+                if (syncScale)    targetComponent.localScale = reader.ReadVector3();
+            }
+        }
+
+        // OnGUI allocates even if it does nothing. avoid in release.
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         // debug ///////////////////////////////////////////////////////////////
         protected virtual void OnGUI()
@@ -571,11 +723,11 @@ namespace Mirror
                 // obvious if we accidentally populate both.
                 GUILayout.Label($"Server Buffer:{serverBuffer.Count}");
                 if (serverCatchup > 0)
-                    GUILayout.Label($"Server Catchup:{serverCatchup*100:F2}%");
+                    GUILayout.Label($"Server Catchup:{serverCatchup * 100:F2}%");
 
                 GUILayout.Label($"Client Buffer:{clientBuffer.Count}");
                 if (clientCatchup > 0)
-                    GUILayout.Label($"Client Catchup:{clientCatchup*100:F2}%");
+                    GUILayout.Label($"Client Catchup:{clientCatchup * 100:F2}%");
 
                 GUILayout.EndArea();
                 GUI.color = Color.white;

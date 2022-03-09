@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
+using UnityEngine;
 
 namespace Mirror
 {
+    [AddComponentMenu("Network/ Interest Management/ Team/Team Interest Management")]
     public class TeamInterestManagement : InterestManagement
     {
         readonly Dictionary<string, HashSet<NetworkIdentity>> teamObjects =
@@ -24,6 +26,7 @@ namespace Mirror
             if (currentTeam == string.Empty)
                 return;
 
+            // Debug.Log($"MatchInterestManagement.OnSpawned({identity.name}) currentMatch: {currentTeam}");
             if (!teamObjects.TryGetValue(currentTeam, out HashSet<NetworkIdentity> objects))
             {
                 objects = new HashSet<NetworkIdentity>();
@@ -56,11 +59,12 @@ namespace Mirror
                     continue;
 
                 string newTeam = networkTeam.teamId;
-                lastObjectTeam.TryGetValue(netIdentity, out string currentTeam);
+                if (!lastObjectTeam.TryGetValue(netIdentity, out string currentTeam))
+                    continue;
 
                 // string.Empty is never a valid teamId
                 // Nothing to do if teamId hasn't changed
-                if (newTeam == string.Empty || newTeam == currentTeam)
+                if (string.IsNullOrWhiteSpace(newTeam) || newTeam == currentTeam)
                     continue;
 
                 // Mark new/old Teams as dirty so they get rebuilt
@@ -91,7 +95,7 @@ namespace Mirror
         {
             // Remove this object from the hashset of the team it just left
             // string.Empty is never a valid teamId
-            if (currentTeam != string.Empty)
+            if (!string.IsNullOrWhiteSpace(currentTeam))
                 teamObjects[currentTeam].Remove(netIdentity);
 
             // Set this to the new team this object just entered
@@ -112,21 +116,35 @@ namespace Mirror
                     NetworkServer.RebuildObservers(netIdentity, false);
         }
 
-        public override bool OnCheckObserver(NetworkIdentity identity, NetworkConnection newObserver)
+        public override bool OnCheckObserver(NetworkIdentity identity, NetworkConnectionToClient newObserver)
         {
             // Always observed if no NetworkTeam component
             if (!identity.TryGetComponent<NetworkTeam>(out NetworkTeam identityNetworkTeam))
                 return true;
 
+            if (identityNetworkTeam.forceShown)
+                return true;
+
+            // string.Empty is never a valid teamId
+            if (string.IsNullOrWhiteSpace(identityNetworkTeam.teamId))
+                return false;
+
             // Always observed if no NetworkTeam component
             if (!newObserver.identity.TryGetComponent<NetworkTeam>(out NetworkTeam newObserverNetworkTeam))
                 return true;
 
+            if (newObserverNetworkTeam.forceShown)
+                return true;
+
+            // string.Empty is never a valid teamId
+            if (string.IsNullOrWhiteSpace(newObserverNetworkTeam.teamId))
+                return false;
+
             // Observed only if teamId's match
-            return identityNetworkTeam.forceShown || identityNetworkTeam.teamId == newObserverNetworkTeam.teamId;
+            return identityNetworkTeam.teamId == newObserverNetworkTeam.teamId;
         }
 
-        public override void OnRebuildObservers(NetworkIdentity identity, HashSet<NetworkConnection> newObservers, bool initialize)
+        public override void OnRebuildObservers(NetworkIdentity identity, HashSet<NetworkConnectionToClient> newObservers)
         {
             // If this object doesn't have a NetworkTeam then it's visible to all clients
             if (!identity.TryGetComponent<NetworkTeam>(out NetworkTeam networkTeam))
@@ -156,7 +174,7 @@ namespace Mirror
                     newObservers.Add(networkIdentity.connectionToClient);
         }
 
-        void AddAllConnections(HashSet<NetworkConnection> newObservers)
+        void AddAllConnections(HashSet<NetworkConnectionToClient> newObservers)
         {
             foreach (NetworkConnectionToClient conn in NetworkServer.connections.Values)
             {

@@ -19,7 +19,7 @@ public class #SCRIPTNAME# : InterestManagement
     /// <param name="newObserver">Network Connection of a client.</param>
     /// <returns>True if the client can see this object.</returns>
     [ServerCallback]
-    public override bool OnCheckObserver(NetworkIdentity identity, NetworkConnection newObserver)
+    public override bool OnCheckObserver(NetworkIdentity identity, NetworkConnectionToClient newObserver)
     {
         // Default behaviour of making the identity object visible to all clients.
         // Replace this code with your own logic as appropriate.
@@ -34,7 +34,7 @@ public class #SCRIPTNAME# : InterestManagement
     /// <param name="newObservers">cached hashset to put the result into</param>
     /// <param name="initialize">true if being rebuilt for the first time</param>
     [ServerCallback]
-    public override void OnRebuildObservers(NetworkIdentity identity, HashSet<NetworkConnection> newObservers, bool initialize)
+    public override void OnRebuildObservers(NetworkIdentity identity, HashSet<NetworkConnectionToClient> newObservers, bool initialize)
     {
         // Default behaviour of making the identity object visible to all clients.
         // Replace this code with your own logic as appropriate.
@@ -47,20 +47,14 @@ public class #SCRIPTNAME# : InterestManagement
     /// </summary>
     /// <param name="identity">NetworkIdentity of the object being spawned</param>
     [ServerCallback]
-    public override void OnSpawned(NetworkIdentity identity)
-    {
-        base.OnSpawned(identity);
-    }
+    public override void OnSpawned(NetworkIdentity identity) { }
 
     /// <summary>
     /// Called on the server when a networked object is destroyed.
     /// </summary>
     /// <param name="identity">NetworkIdentity of the object being destroyed</param>
     [ServerCallback]
-    public override void OnDestroyed(NetworkIdentity identity)
-    {
-        base.OnDestroyed(identity);
-    }
+    public override void OnDestroyed(NetworkIdentity identity) { }
 
     /// <summary>
     /// Callback used by the visibility system for objects on a host.
@@ -77,6 +71,12 @@ public class #SCRIPTNAME# : InterestManagement
     {
         base.SetHostVisibility(identity, visible);
     }
+
+    /// <summary>
+    /// Called by NetworkServer in Initialize and Shutdown
+    /// </summary>
+    [ServerCallback]
+    public override void Reset() { }
 
     [ServerCallback]
     void Update()
